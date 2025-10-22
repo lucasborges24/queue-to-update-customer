@@ -6,6 +6,9 @@ const bodyParser = require('body-parser');
 const app = express();
 const DATA_DIR = path.join(__dirname, 'data');
 
+// garante que a pasta de dados exista antes de tentar ler ou gravar arquivos
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
 app.use(bodyParser.json({ limit: '1mb' }));
 app.use(express.static(__dirname));
 
@@ -41,5 +44,9 @@ app.post('/api/weeks', (req, res) => {
   });
 });
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => console.log('Server listening on http://localhost:' + port));
+if (require.main === module) {
+  const port = process.env.PORT || 3000;
+  app.listen(port, () => console.log('Server listening on http://localhost:' + port));
+}
+
+module.exports = app;
