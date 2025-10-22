@@ -1,0 +1,6 @@
+/* app/globals.css */
+@import "tailwindcss";
+
+/* opcional: um toque de base */
+html, body { min-height: 100%; }
+body { background: #f9fafb; color: #111827; }
