@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gerador de Prioridades da Semana</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #08101f; color: #eaf0ff; padding: 24px; display: grid; place-items: start center; }
+    .app { width: 100%; max-width: 980px; background: #121a2b; padding: 20px; border-radius: 12px; border: 1px solid #1f2a44; }
+    header { display:flex; gap:12px; align-items:center; }
+    h1 { margin:0; font-size:18px }
+    .tag { background:#0e1727; padding:6px 8px; border-radius:999px; color:#7a8aa0; border:1px solid #1f2a44 }
+    .controls { display:flex; gap:8px; margin-top:14px; align-items:center }
+    button { background:#6ea8ff; color:#031129; border: none; padding:10px 12px; border-radius:8px; cursor:pointer; font-weight:600 }
+    button.secondary { background:#162038; color:#eaf0ff }
+    .msg { margin-top:12px }
+    .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:12px }
+    .card { background:#0e1727; padding:10px; border-radius:8px; border:1px solid #1f2a44 }
+    pre { white-space:pre-wrap; margin:0 }
+    ul { margin:6px 0 0 14px }
+    .list-weeks { margin-top:14px }
+    a.link { color:var(--accent,#6ea8ff); cursor:pointer; text-decoration:none }
+    .small { color:#7a8aa0; font-size:13px }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Gerador de Prioridades da Semana</h1>
+      <span class="tag">Gera e salva uma versão por data</span>
+    </header>
+
+    <div class="controls">
+      <button id="gerar">Gerar prioridades da semana</button>
+      <button id="salvar" class="secondary" disabled>Salvar no servidor</button>
+      <div id="status" class="small"></div>
+    </div>
+
+    <div class="grid" id="result"></div>
+
+    <div class="list-weeks">
+      <h3>Semanas salvas</h3>
+      <div id="weeksList" class="card small">Carregando...</div>
+    </div>
+  </div>
+
+  <script>
+    // Copia simples das prioridades do projeto (seu arquivo principal)
+    const PRIORIDADES = {
+      dom: [ { name: "Yan Lucas", p: 5 }, { name: "Lucas Solerne", p: 5 }, { name: "Pedro", p: 3 }, { name: "Anthony", p: 2 }, { name: "Cadu", p: 1 } ],
+      seg: [ { name: "Cadu", p: 5 }, { name: "Anthony", p: 5 }, { name: "Lucas Solerne", p: 5 }, { name: "Yan Lucas", p: 4 }, { name: "Pedro", p: 3 }, { name: "Marcos", p: 3 } ],
+      ter: [ { name: "Pedro", p: 5 }, { name: "Paulo", p: 5 }, { name: "Cadu", p: 5 }, { name: "Lucas Solerne", p: 5 }, { name: "Anthony", p: 5 }, { name: "Marcos", p: 4 }, { name: "Yan Lucas", p: 3 }, { name: "Jerfeson", p: 1 }, { name: "Natasha", p: 1 } ],
+      quar: [ { name: "Pedro", p: 5 }, { name: "Anthony", p: 5 }, { name: "Lucas Solerne", p: 4 }, { name: "Yan Lucas", p: 3 }, { name: "Marcos", p: 3 }, { name: "Cadu", p: 1 }, { name: "Jerfeson", p: 1 } ],
+      qui: [ { name: "Cadu", p: 5 }, { name: "Anthony", p: 5 }, { name: "Lucas Solerne", p: 4 }, { name: "Paulo", p: 3 }, { name: "Yan Lucas", p: 3 }, { name: "Marcos", p: 2 }, { name: "Pedro", p: 1 }, { name: "Natasha", p: 1 } ]
+    };
+
+    const dias = Object.keys(PRIORIDADES);
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function gerarSemana() {
+      const semana = {};
+      for (const d of dias) {
+        const lista = [...PRIORIDADES[d]];
+        // Agrupa por prioridade e embaralha empates
+        const grupos = {};
+        for (const x of lista) {
+          (grupos[x.p] = grupos[x.p] || []).push(x.name);
+        }
+        const ps = Object.keys(grupos).map(n => parseInt(n,10)).sort((a,b) => b-a);
+        const ordenado = [];
+        for (const p of ps) {
+          const nomes = shuffle([...grupos[p]]);
+          for (const n of nomes) ordenado.push({ name: n, p });
+        }
+        semana[d] = ordenado;
+      }
+      return semana;
+    }
+
+    const btnGerar = document.getElementById('gerar');
+    const btnSalvar = document.getElementById('salvar');
+    const result = document.getElementById('result');
+    const status = document.getElementById('status');
+
+    let ultimaSemana = null;
+
+    btnGerar.addEventListener('click', () => {
+      ultimaSemana = gerarSemana();
+      renderSemana(ultimaSemana);
+      btnSalvar.disabled = false;
+      status.textContent = 'Gerado localmente. Salve se quiser persistir.';
+    });
+
+    btnSalvar.addEventListener('click', async () => {
+      if (!ultimaSemana) return;
+      btnSalvar.disabled = true;
+      status.textContent = 'Salvando...';
+      try {
+        const resp = await fetch('/api/weeks', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: new Date().toISOString(), week: ultimaSemana })
+        });
+        if (!resp.ok) throw new Error('Erro ao salvar');
+        const j = await resp.json();
+        status.textContent = 'Salvo: ' + j.filename;
+        loadWeeks();
+      } catch (e) {
+        status.textContent = 'Falha ao salvar: ' + (e.message || e);
+        btnSalvar.disabled = false;
+      }
+    });
+
+    function renderSemana(semana) {
+      result.innerHTML = '';
+      for (const d of dias) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        const h = document.createElement('h4'); h.textContent = d.toUpperCase(); h.style.margin = '0 0 8px 0';
+        const pre = document.createElement('pre');
+        pre.textContent = semana[d].map((x,i) => `${i+1}. ${x.name} (prio ${x.p})`).join('\n');
+        card.appendChild(h); card.appendChild(pre);
+        result.appendChild(card);
+      }
+    }
+
+    async function loadWeeks() {
+      const el = document.getElementById('weeksList');
+      try {
+        const resp = await fetch('/api/weeks');
+        if (!resp.ok) throw new Error('não carregou');
+        const list = await resp.json();
+        if (!list.length) { el.textContent = 'Nenhuma semana salva ainda.'; return; }
+        el.innerHTML = '';
+        const ul = document.createElement('ul');
+        for (const f of list) {
+          const li = document.createElement('li');
+          const a = document.createElement('a');
+          a.className = 'link'; a.textContent = f; a.href = '#';
+          a.addEventListener('click', async (ev) => {
+            ev.preventDefault();
+            const r = await fetch('/api/weeks/' + encodeURIComponent(f));
+            if (!r.ok) return alert('Falha ao carregar');
+            const data = await r.json();
+            ultimaSemana = data.week;
+            renderSemana(ultimaSemana);
+            btnSalvar.disabled = false;
+            status.textContent = 'Carregado ' + f;
+          });
+          li.appendChild(a);
+          ul.appendChild(li);
+        }
+        el.appendChild(ul);
+      } catch (e) {
+        el.textContent = 'Erro ao listar semanas: ' + e.message;
+      }
+    }
+
+    // Carrega lista ao abrir
+    loadWeeks();
+  </script>
+</body>
+</html>
