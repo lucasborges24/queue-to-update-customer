@@ -1,5 +1,6 @@
 import { buildWeekOrdering, WeekOrdering } from './algo';
 import { currentWeekKey } from './dates';
+import { join } from 'node:path';
 
 type WeekDoc = {
   key: string; // YYYY-MM-DD (segunda)
@@ -9,20 +10,43 @@ type WeekDoc = {
 
 const USE_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN; // defina na Vercel
 
+const DATA_DIR = process.env.VERCEL ? '/tmp/queue-to-update-customer-data' : 'data';
+const DATA_FILE = join(DATA_DIR, 'weeks.json');
+let memoryCache: Record<string, WeekDoc> = {};
+let hasMemoryCache = false;
+
 // ---------- Local FS (dev) ----------
 async function readLocal(): Promise<Record<string, WeekDoc>> {
+  if (hasMemoryCache) return memoryCache;
   const fs = await import('node:fs/promises');
   try {
-    const buf = await fs.readFile('data/weeks.json', 'utf8');
-    return JSON.parse(buf || '{}');
-  } catch {
-    return {};
+    const buf = await fs.readFile(DATA_FILE, 'utf8');
+    memoryCache = JSON.parse(buf || '{}');
+    hasMemoryCache = true;
+    return memoryCache;
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Storage read fallback (using in-memory cache)', err);
+    }
+    if (!hasMemoryCache) {
+      memoryCache = {};
+      hasMemoryCache = true;
+    }
+    return memoryCache;
   }
 }
 async function writeLocal(all: Record<string, WeekDoc>): Promise<void> {
   const fs = await import('node:fs/promises');
-  await fs.mkdir('data', { recursive: true });
-  await fs.writeFile('data/weeks.json', JSON.stringify(all, null, 2), 'utf8');
+  memoryCache = all;
+  hasMemoryCache = true;
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(DATA_FILE, JSON.stringify(all, null, 2), 'utf8');
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Storage write fallback (persisting in memory only)', err);
+    }
+  }
 }
 
 // ---------- Vercel Blob (prod persistente) ----------
@@ -51,17 +75,17 @@ async function writeLocal(all: Record<string, WeekDoc>): Promise<void> {
 export async function getOrCreateWeek(key?: string): Promise<WeekDoc> {
   const wk = key ?? currentWeekKey();
 
-    // Local file fallback (dev). Em produção sem Blob não persiste entre execuções.
-    const all = await readLocal();
-    if (all[wk]) return all[wk];
-    const created: WeekDoc = {
-      key: wk,
-      createdAt: new Date().toISOString(),
-      orderings: buildWeekOrdering(wk)
-    };
-    all[wk] = created;
-    await writeLocal(all);
-    return created;
+  // Local file fallback (dev). Em produção sem Blob não persiste entre execuções.
+  const all = await readLocal();
+  if (all[wk]) return all[wk];
+  const created: WeekDoc = {
+    key: wk,
+    createdAt: new Date().toISOString(),
+    orderings: buildWeekOrdering(wk)
+  };
+  all[wk] = created;
+  await writeLocal(all);
+  return created;
   
 }
 
