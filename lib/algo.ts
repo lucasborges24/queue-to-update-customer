@@ -70,45 +70,34 @@ export function assignForDay(
   list.forEach((w) => (perWorker[w.name] = 0));
 
   const priorities = Array.from(new Set(list.map((w) => w.priority))).sort((a, b) => b - a);
-  const pointers: Record<number, number> = {};
-  priorities.forEach((p) => (pointers[p] = 0));
 
   const capacity = list.length * capacityPerWorker;
   const take = Math.min(clients, capacity);
   const assignments: string[] = [];
 
-  for (let i = 0; i < take; i++) {
-    let picked: string | null = null;
+  let remaining = take;
 
-    for (const p of priorities) {
-      const order = weekOrdering[day][p] || list.filter((w) => w.priority === p).map((w) => w.name);
-      if (!order.length) continue;
+  for (const p of priorities) {
+    if (remaining <= 0) break;
 
-      // percorre a ordem circular para achar alguém com slot
-      const L = order.length;
-      let idx = pointers[p] % (L || 1);
-      let tried = 0;
+    const order = (weekOrdering[day][p] || list.filter((w) => w.priority === p).map((w) => w.name)).filter(
+      (name, idx, arr) => arr.indexOf(name) === idx
+    );
+    if (!order.length) continue;
 
-      while (tried < L) {
-        const name = order[idx];
-        if (perWorker[name] < capacityPerWorker) {
-          picked = name;
-          if (perWorker[name] + 1 >= capacityPerWorker) {
-            pointers[p] = (idx + 1) % L; // avanca quando esgota a capacidade
-          } else {
-            pointers[p] = idx; // mantem o mesmo colaborador ate completar os 2 clientes
-          }
-          break;
-        }
-        idx = (idx + 1) % L;
-        tried++;
+    for (const name of order) {
+      if (remaining <= 0) break;
+
+      const available = capacityPerWorker - (perWorker[name] ?? 0);
+      if (available <= 0) continue;
+
+      const assignCount = Math.min(available, remaining);
+      for (let i = 0; i < assignCount; i++) {
+        assignments.push(name);
+        perWorker[name] = (perWorker[name] ?? 0) + 1;
+        remaining--;
       }
-      if (picked) break;
     }
-
-    if (!picked) break; // esgotou capacidade
-    perWorker[picked]++;
-    assignments.push(picked);
   }
 
   return { assignments, perWorker, capacity, requested: clients, day };
