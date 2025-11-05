@@ -201,6 +201,7 @@
       ],
     };
     const DIA_LABEL = { dom: "Domingo", seg: "Segunda", ter: "Terça", quar: "Quarta", qui: "Quinta" };
+    const DIA_KEY_BY_NUM = { 0: "dom", 1: "seg", 2: "ter", 3: "quar", 4: "qui", 5: "dom", 6: "dom" };
     const MAX_POR_COLAB = 2;
 
     // ======= UI =======
@@ -223,7 +224,9 @@
         opt.textContent = DIA_LABEL[k] || k;
         selDia.appendChild(opt);
       });
-      selDia.value = "qui"; // default útil p/ seu exemplo
+      // Define o valor padrão de acordo com o dia atual (sex/sáb → domingo)
+      const hojeNum = new Date().getDay();
+      selDia.value = DIA_KEY_BY_NUM[hojeNum] || "dom";
       refreshDayInfo();
     })();
 
